@@ -1,248 +1,352 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import styles from './ProductList.module.css';
 
 interface Product {
   id: number;
   title: string;
   brand: string;
-  sku: string; // здесь будем использовать code из API
+  category: string;
+  description: string;
+  price: number;
+  discountPercentage: number;
+  rating: number;
+  stock: number;
+  thumbnail: string;
+  images: string[];
+  sku?: string;
+}
+
+type SortOrder = 'asc' | 'desc' | null;
+
+interface SortState {
+  column: keyof ProductSortable | null;
+  order: SortOrder;
+}
+
+type ProductSortable = {
+  title: string;
+  brand: string;
+  sku: string;
   rating: number;
   price: number;
   stock: number;
+};
+
+const ITEMS_PER_PAGE = 10;
+
+function fakeSkuFromId(id: number): string {
+  return 'SKU' + id.toString().padStart(5, '0');
 }
-
-type SortKey = 'title' | 'brand' | 'sku' | 'rating' | 'price' | 'stock';
-type SortOrder = 'asc' | 'desc';
-
-const API_PRODUCTS_URL = 'https://dummyjson.com/products';
 
 export const ProductList: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [sortKey, setSortKey] = useState<SortKey>('title');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
-  const [isAddModalOpen, setAddModalOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<SortState>({ column: null, order: null });
+  const [toast, setToast] = useState<string | null>(null);
 
-  const fetchProducts = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      const url = search.trim()
-        ? `https://dummyjson.com/products/search?q=${encodeURIComponent(search.trim())}`
-        : API_PRODUCTS_URL;
-
-      const res = await fetch(url);
-      if (!res.ok) throw new Error('Ошибка загрузки товаров');
-      const json = await res.json();
-
-      const loadedProducts: Product[] = (json.products || []).map((p: any) => ({
-        id: p.id,
-        title: p.title,
-        brand: p.brand,
-        sku: p.code || `SKU-${p.id}`, // если sku нет в API, создаём заглушку
-        rating: p.rating,
-        price: p.price,
-        stock: p.stock,
-      }));
-
-      setProducts(loadedProducts);
-    } catch (e: any) {
-      setError(e.message || 'Ошибка загрузки');
-    } finally {
-      setLoading(false);
-    }
-  }, [search]);
-
-  useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
-
-  const onSort = (key: SortKey) => {
-    if (key === sortKey) setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    else {
-      setSortKey(key);
-      setSortOrder('asc');
-    }
-  };
-
-  const sortedProducts = [...products].sort((a, b) => {
-    const valA = a[sortKey];
-    const valB = b[sortKey];
-
-    if (typeof valA === 'string' && typeof valB === 'string') {
-      return sortOrder === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-    }
-    if (typeof valA === 'number' && typeof valB === 'number') {
-      return sortOrder === 'asc' ? valA - valB : valB - valA;
-    }
-    return 0;
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [newProduct, setNewProduct] = useState({
+    title: '',
+    price: '',
+    brand: '',
+    sku: '',
   });
 
-  // Добавление товара (без API, по условию)
-  const handleAddProduct = (product: Omit<Product, 'id'>) => {
-    setProducts(prev => [{ ...product, id: Date.now() }, ...prev]);
-    alert('Товар успешно добавлен!');
-    setAddModalOpen(false);
+  useEffect(() => {
+    const fetchProducts = async () => {
+      setLoading(true);
+      try {
+        const skip = (page - 1) * ITEMS_PER_PAGE;
+        let url = `https://dummyjson.com/products?limit=${ITEMS_PER_PAGE}&skip=${skip}`;
+        if (search.trim()) {
+          url = `https://dummyjson.com/products/search?q=${encodeURIComponent(search)}&limit=${ITEMS_PER_PAGE}&skip=${skip}`;
+        }
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Ошибка загрузки товаров');
+
+        const productsWithSku = data.products.map((p: Product) => ({
+          ...p,
+          sku: p.sku || fakeSkuFromId(p.id),
+        }));
+        setProducts(productsWithSku);
+      } catch (e: any) {
+        console.error('Ошибка загрузки', e.message);
+        setProducts([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProducts();
+  }, [page, search]);
+
+  const handleSort = (column: keyof ProductSortable) => {
+    if (sort.column === column) {
+      if (sort.order === 'asc') {
+        setSort({ column, order: 'desc' });
+      } else if (sort.order === 'desc') {
+        setSort({ column: null, order: null });
+      }
+    } else {
+      setSort({ column, order: 'asc' });
+    }
   };
 
-  return (
-    <div className={styles.container}>
-      <h1 className={styles.title}>Товары</h1>
+  const sortedProducts = useMemo(() => {
+    if (!sort.column || !sort.order) return products;
 
-      <input
-        type="search"
-        placeholder="Найти товар"
-        className={styles.searchInput}
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        disabled={loading}
-      />
+    return [...products].sort((a, b) => {
+      let aValue: any = a[sort.column!];
+      let bValue: any = b[sort.column!];
 
-      <button className={styles.buttonAdd} onClick={() => setAddModalOpen(true)}>
-        Добавить
-      </button>
+      if (typeof aValue === 'string' && !['sku', 'title', 'brand'].includes(sort.column!)) {
+        aValue = Number(aValue);
+      }
+      if (typeof bValue === 'string' && !['sku', 'title', 'brand'].includes(sort.column!)) {
+        bValue = Number(bValue);
+      }
 
-      {loading && <div className={styles.loadingBar}>Загрузка...</div>}
-
-      {error && <div className={styles.error}>{error}</div>}
-
-      <table className={styles.table}>
-        <thead>
-          <tr>
-            <SortableTh label="Наименование" sortKey="title" onSort={onSort} currentKey={sortKey} order={sortOrder} />
-            <SortableTh label="Вендор" sortKey="brand" onSort={onSort} currentKey={sortKey} order={sortOrder} />
-            <SortableTh label="Артикул" sortKey="sku" onSort={onSort} currentKey={sortKey} order={sortOrder} />
-            <SortableTh label="Оценка" sortKey="rating" onSort={onSort} currentKey={sortKey} order={sortOrder} />
-            <SortableTh label="Цена, ₽" sortKey="price" onSort={onSort} currentKey={sortKey} order={sortOrder} />
-            <SortableTh label="Количество" sortKey="stock" onSort={onSort} currentKey={sortKey} order={sortOrder} />
-          </tr>
-        </thead>
-        <tbody>
-          {sortedProducts.length === 0 && !loading && (
-            <tr>
-              <td colSpan={6} style={{ textAlign: 'center', padding: 20 }}>
-                Товары не найдены
-              </td>
-            </tr>
-          )}
-          {sortedProducts.map(product => (
-            <tr key={product.id}>
-              <td>{product.title}</td>
-              <td>{product.brand}</td>
-              <td>{product.sku}</td>
-              <td style={{ color: product.rating < 3 ? 'red' : undefined }}>{product.rating.toFixed(2)}</td>
-              <td>{product.price.toLocaleString('ru-RU')}</td>
-              <td>{product.stock}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      {isAddModalOpen && (
-        <AddProductModal onClose={() => setAddModalOpen(false)} onAdd={handleAddProduct} />
-      )}
-    </div>
-  );
-};
-
-// Вспомогательный компонент для сортируемой шапки
-interface SortableThProps {
-  label: string;
-  sortKey: SortKey;
-  currentKey: SortKey;
-  order: SortOrder;
-  onSort: (key: SortKey) => void;
-}
-
-const SortableTh: React.FC<SortableThProps> = ({ label, sortKey, currentKey, order, onSort }) => {
-  const active = currentKey === sortKey;
-
-  return (
-    <th
-      tabIndex={0}
-      role="button"
-      aria-sort={active ? (order === 'asc' ? 'ascending' : 'descending') : 'none'}
-      onClick={() => onSort(sortKey)}
-      onKeyDown={e => {
-        if (e.key === 'Enter') onSort(sortKey);
-      }}
-      style={{ cursor: 'pointer', userSelect: 'none', padding: '8px 12px' }}
-    >
-      {label} {active && (order === 'asc' ? '▲' : '▼')}
-    </th>
-  );
-};
-
-// Компонент модального окна добавления товара (по условию без API-сохранения)
-
-interface AddProductModalProps {
-  onClose: () => void;
-  onAdd: (product: Omit<Product, 'id'>) => void;
-}
-
-const AddProductModal: React.FC<AddProductModalProps> = ({ onClose, onAdd }) => {
-  const [title, setTitle] = useState('');
-  const [price, setPrice] = useState('');
-  const [brand, setBrand] = useState('');
-  const [sku, setSku] = useState('');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!title.trim() || !price.trim() || !brand.trim() || !sku.trim()) {
-      alert('Все поля обязательны!');
-      return;
-    }
-
-    if (isNaN(+price) || +price <= 0) {
-      alert('Цена должна быть положительным числом');
-      return;
-    }
-
-    onAdd({
-      title: title.trim(),
-      price: +price,
-      brand: brand.trim(),
-      sku: sku.trim(),
-      rating: 0,
-      stock: 0,
+      if (aValue > bValue) {
+        return sort.order === 'asc' ? 1 : -1;
+      }
+      if (aValue < bValue) {
+        return sort.order === 'asc' ? -1 : 1;
+      }
+      return 0;
     });
+  }, [products, sort]);
 
-    // Очистка поля по закрытию
-    setTitle('');
-    setPrice('');
-    setBrand('');
-    setSku('');
+  const openAddModal = () => {
+    setNewProduct({ title: '', price: '', brand: '', sku: '' });
+    setShowAddModal(true);
+  };
+
+  const closeAddModal = () => setShowAddModal(false);
+
+  const handleNewProductChange = (field: keyof typeof newProduct, value: string) => {
+    setNewProduct(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleAddProduct = () => {
+    if (
+      !newProduct.title.trim() ||
+      !newProduct.price.trim() ||
+      !newProduct.brand.trim() ||
+      !newProduct.sku.trim() ||
+      isNaN(Number(newProduct.price))
+    ) {
+      alert('Пожалуйста, заполните корректно все поля');
+      return;
+    }
+    setToast(`Товар "${newProduct.title.trim()}" успешно добавлен!`);
+    closeAddModal();
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+  };
+
+  const renderSortIndicator = (col: keyof ProductSortable) => {
+    if (sort.column !== col) return null;
+    if (sort.order === 'asc') return <span className={styles.sortIndicator}>▲</span>;
+    if (sort.order === 'desc') return <span className={styles.sortIndicator}>▼</span>;
+    return null;
   };
 
   return (
-    <div className={styles.modalOverlay}>
-      <div className={styles.modalContent}>
-        <h2>Добавить товар</h2>
-        <form onSubmit={handleSubmit} className={styles.modalForm} noValidate>
-          <label>Наименование</label>
-          <input type="text" value={title} onChange={e => setTitle(e.target.value)} required />
+    <div className={styles.wrapper}>
+      {loading && (
+        <div className={styles.progressBarContainer}>
+          <div className={styles.progressBar} />
+        </div>
+      )}
 
-          <label>Цена</label>
-          <input type="number" value={price} onChange={e => setPrice(e.target.value)} required min={0} />
+      <div className={styles.header}>
+        <h2 className={styles.title}>Товары</h2>
 
-          <label>Вендор</label>
-          <input type="text" value={brand} onChange={e => setBrand(e.target.value)} required />
-
-          <label>Артикул</label>
-          <input type="text" value={sku} onChange={e => setSku(e.target.value)} required />
-
-          <div className={styles.modalButtons}>
-            <button type="button" onClick={onClose}>
-              Отмена
-            </button>
-            <button type="submit">Добавить</button>
-          </div>
-        </form>
+        <input
+          type="search"
+          placeholder="Найти"
+          className={styles.searchInput}
+          value={search}
+          onChange={e => {
+            setPage(1);
+            setSearch(e.target.value);
+          }}
+        />
+        <div className={styles.buttons}>
+          <button title="Обновить" className={styles.buttonAdd} onClick={() => setPage(1)}>
+            &#x21bb;
+          </button>
+          <button className={styles.buttonAdd} onClick={openAddModal}>
+            Добавить
+          </button>
+        </div>
       </div>
+
+      <div className={styles.tableContainer}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <th>
+                <input type="checkbox" className={styles.checkbox} />
+              </th>
+              <th onClick={() => handleSort('title')}>
+                Наименование {renderSortIndicator('title')}
+              </th>
+              <th onClick={() => handleSort('brand')}>
+                Вендор {renderSortIndicator('brand')}
+              </th>
+              <th onClick={() => handleSort('sku')}>
+                Артикул {renderSortIndicator('sku')}
+              </th>
+              <th onClick={() => handleSort('rating')}>
+                Оценка {renderSortIndicator('rating')}
+              </th>
+              <th onClick={() => handleSort('price')}>
+                Цена, ₽ {renderSortIndicator('price')}
+              </th>
+              <th onClick={() => handleSort('stock')}>
+                Количество {renderSortIndicator('stock')}
+              </th>
+              <th>Действия</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedProducts.length === 0 && !loading && (
+              <tr>
+                <td colSpan={8} style={{ textAlign: 'center', padding: 20, color: '#888' }}>
+                  Товары не найдены
+                </td>
+              </tr>
+            )}
+
+            {sortedProducts.map(product => (
+              <tr key={product.id}>
+                <td>
+                  <input type="checkbox" className={styles.checkbox} />
+                </td>
+                <td>{product.title}</td>
+                <td>{product.brand}</td>
+                <td>{product.sku}</td>
+                <td>
+                  <span className={`${styles.rating} ${product.rating < 3 ? styles.low : ''}`}>
+                    {product.rating.toFixed(2)}
+                  </span>
+                </td>
+                <td className={styles.price}>{product.price.toLocaleString()} ₽</td>
+                <td className={styles.quantity}>{product.stock}</td>
+                <td>
+                  <button
+                    style={{
+                      backgroundColor: '#0055ff',
+                      border: 'none',
+                      borderRadius: 8,
+                      color: 'white',
+                      cursor: 'pointer',
+                      padding: '4px 8px',
+                      fontWeight: 600,
+                      marginRight: 8,
+                    }}
+                    onClick={() => alert(`Добавить товар ${product.title} в корзину`)}
+                    title="Добавить товар"
+                  >
+                    +
+                  </button>
+
+                  <button
+                    style={{
+                      backgroundColor: '#ff3b3b',
+                      border: 'none',
+                      borderRadius: 8,
+                      color: 'white',
+                      cursor: 'pointer',
+                      padding: '4px 8px',
+                      fontWeight: 600,
+                    }}
+                    onClick={() => {
+                      if (window.confirm(`Удалить товар "${product.title}"?`)) {
+                        setProducts(prev => prev.filter(p => p.id !== product.id));
+                      }
+                    }}
+                    title="Удалить товар"
+                  >
+                    Удалить
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className={styles.pagination}>
+        {Array.from({ length: 10 }).map((_, i) => (
+          <button
+            key={i}
+            className={`${styles.pageButton} ${page === i + 1 ? styles.active : ''}`}
+            onClick={() => handlePageChange(i + 1)}
+          >
+            {i + 1}
+          </button>
+        ))}
+      </div>
+
+      {showAddModal && (
+        <div className={styles.modalBackdrop} onClick={closeAddModal}>
+          <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <h3 className={styles.modalTitle}>Добавить товар</h3>
+
+            <label className={styles.modalLabel}>Наименование</label>
+            <input
+              className={styles.modalInput}
+              value={newProduct.title}
+              onChange={e => handleNewProductChange('title', e.target.value)}
+              type="text"
+              autoFocus
+            />
+
+            <label className={styles.modalLabel}>Цена</label>
+            <input
+              className={styles.modalInput}
+              value={newProduct.price}
+              onChange={e => handleNewProductChange('price', e.target.value)}
+              type="number"
+              min={0}
+            />
+
+            <label className={styles.modalLabel}>Вендор</label>
+            <input
+              className={styles.modalInput}
+              value={newProduct.brand}
+              onChange={e => handleNewProductChange('brand', e.target.value)}
+              type="text"
+            />
+
+            <label className={styles.modalLabel}>Артикул</label>
+            <input
+              className={styles.modalInput}
+              value={newProduct.sku}
+              onChange={e => handleNewProductChange('sku', e.target.value)}
+              type="text"
+            />
+
+            <div className={styles.modalButtons}>
+              <button className={`${styles.modalButton} ${styles.cancel}`} onClick={closeAddModal}>
+                Отмена
+              </button>
+              <button className={`${styles.modalButton} ${styles.submit}`} onClick={handleAddProduct}>
+                Добавить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && <div className={styles.toast}>{toast}</div>}
     </div>
   );
 };

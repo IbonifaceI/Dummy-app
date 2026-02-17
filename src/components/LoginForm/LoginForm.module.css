@@ -119,3 +119,14 @@
   text-decoration: none;
   cursor: pointer;
 }
+
+.success {
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background-color: #d4edda;
+  color: #155724;
+  border-radius: 8px;
+  font-weight: 600;
+  user-select: none;
+  text-align: center;
+}

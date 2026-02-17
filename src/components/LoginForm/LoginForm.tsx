@@ -1,141 +1,92 @@
-import React, { useState, FormEvent } from 'react';
+import React, { useState } from 'react';
 import styles from './LoginForm.module.css';
-
-const API_AUTH_URL = 'https://dummyjson.com/auth/login';
-
-interface AuthResponse {
-  id: number;
-  username: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  gender: string;
-  image: string;
-  token: string;
-  refreshToken: string;
-}
-
-function validateEmail(email: string): string | null {
-  if (!email) return 'Email обязателен';
-  const re = /\S+@\S+\.\S+/;
-  if (!re.test(email)) return 'Введите корректный email';
-  return null;
-}
-
-function validatePassword(password: string): string | null {
-  if (!password) return 'Пароль обязателен';
-  if (password.length < 3) return 'Пароль должен быть минимум 3 символа';
-  return null;
-}
+import { useAuth } from '../context/AuthContext';
 
 export const LoginForm: React.FC = () => {
-  const [email, setEmail] = useState('emilys');
-  const [password, setPassword] = useState('emilyspass');
+  const { login, loading } = useAuth();
+
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
-  const validate = (): boolean => {
-    const eErr = validateEmail(email);
-    if (eErr) {
-      setError(eErr);
-      return false;
-    }
-    const pErr = validatePassword(password);
-    if (pErr) {
-      setError(pErr);
-      return false;
-    }
-    setError(null);
-    return true;
-  };
-
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!validate()) return;
-    setLoading(true);
+
     setError(null);
+    setSuccess(null);
+
+    if (!username || !password) {
+      setError('Пожалуйста, заполните все поля');
+      return;
+    }
 
     try {
-      const res = await fetch(API_AUTH_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          username: email,
-          password,
-        }),
-      });
-      const json: AuthResponse & { message?: string } = await res.json();
-
-      if (res.ok && json.token) {
-        if (rememberMe) {
-          localStorage.setItem('authToken', json.token);
-        } else {
-          sessionStorage.setItem('authToken', json.token);
-        }
-        alert(`Добро пожаловать, ${json.firstName} ${json.lastName}!`);
-        window.location.reload();
-      } else {
-        setError(json.message || 'Ошибка авторизации');
-      }
-    } catch {
-      setError('Ошибка сети. Попробуйте еще раз.');
-    } finally {
-      setLoading(false);
+      await login(username, password, rememberMe);
+      setSuccess('Успешная авторизация!');
+      // Очистка полей опционально:
+      // setUsername('');
+      // setPassword('');
+      // Спрятать уведомление через 3 секунды
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Ошибка при авторизации');
     }
   };
 
   return (
     <div className={styles.wrapper}>
-      <form onSubmit={handleSubmit} className={styles.formContainer} noValidate>
-        <div className={styles.logo} aria-label="лого сайта" />
-        <h2 className={styles.title}>Добро пожаловать!</h2>
+      <form className={styles.formContainer} onSubmit={handleSubmit} noValidate>
+        <div className={styles.logo} />
+        <h1 className={styles.title}>Добро пожаловать!</h1>
         <p className={styles.subtitle}>Пожалуйста, авторизуйтесь</p>
 
-        <label htmlFor="email" className={styles.label}>
+        {error && <div className={styles.error}>{error}</div>}
+        {success && <div className={styles.success}>{success}</div>}
+
+        <label htmlFor="username" className={styles.label}>
           Почта
         </label>
         <input
-          id="email"
-          type="email"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
+          id="username"
+          type="text"
           className={styles.input}
+          value={username}
+          onChange={e => setUsername(e.target.value)}
+          placeholder="Введите почту"
           autoComplete="username"
-          disabled={loading}
           required
+          disabled={loading}
         />
 
-        <label htmlFor="password" className={styles.label}>
+        <label htmlFor="password" className={styles.label} style={{ marginTop: 16 }}>
           Пароль
         </label>
         <input
           id="password"
           type="password"
+          className={styles.input}
           value={password}
           onChange={e => setPassword(e.target.value)}
-          className={styles.input}
+          placeholder="Введите пароль"
           autoComplete="current-password"
-          disabled={loading}
           required
+          disabled={loading}
         />
 
         <div className={styles.checkboxGroup}>
           <input
-            id="remember"
+            id="rememberMe"
             type="checkbox"
             checked={rememberMe}
             onChange={e => setRememberMe(e.target.checked)}
             disabled={loading}
           />
-          <label htmlFor="remember" className={styles.checkboxLabel}>
+          <label htmlFor="rememberMe" className={styles.checkboxLabel}>
             Запомнить данные
           </label>
         </div>
-
-        {error && <div className={styles.error}>{error}</div>}
 
         <button
           type="submit"
@@ -147,7 +98,7 @@ export const LoginForm: React.FC = () => {
 
         <p className={styles.registerText}>
           Нет аккаунта?{' '}
-          <a href="#" className={styles.registerLink}>
+          <a href="#" className={styles.registerLink} onClick={e => e.preventDefault()}>
             Создать
           </a>
         </p>
@@ -155,3 +106,5 @@ export const LoginForm: React.FC = () => {
     </div>
   );
 };
+
+export default LoginForm;

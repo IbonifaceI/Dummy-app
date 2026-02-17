@@ -1,142 +1,286 @@
-.container {
-  padding: 40px;
-  background: #f9fafb;
-  min-height: 100vh;
-  box-sizing: border-box;
+/* ProductList.module.css */
+
+.wrapper {
+  max-width: 960px;
+  margin: 20px auto;
+  padding: 16px;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 0 10px rgb(0 0 0 / 0.05);
+  display: flex;
+  flex-direction: column;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
 }
 
 .title {
-  margin-bottom: 20px;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 24px;
+  color: #222;
 }
 
 .searchInput {
-  padding: 8px 12px;
   width: 300px;
-  border-radius: 8px;
+  height: 36px;
   border: 1px solid #ccc;
-  margin-bottom: 20px;
-  font-size: 16px;
+  border-radius: 8px;
+  padding: 0 12px;
+  font-size: 14px;
   outline: none;
 }
 
-.topPanel {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.selectAllLabel {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-weight: 500;
-}
-
-.buttonsGroup {
+.buttons {
   display: flex;
   gap: 12px;
+  align-items: center;
 }
 
-.btn {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
-  background-color: #f0f0f0;
-  cursor: pointer;
-  font-weight: 500;
-  transition: background-color 0.3s;
-}
-
-.btn[disabled] {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btnRefresh {
-  width: 40px;
-  padding: 8px 0;
-  font-size: 18px;
-}
-
-.btnAdd {
-  padding: 8px 20px;
+.buttonAdd {
   background-color: #0055ff;
-  color: white;
   border: none;
+  color: white;
   font-weight: 600;
+  border-radius: 8px;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
 }
 
-.tableWrapper {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+.buttonAdd:hover {
+  background-color: #003dbf;
+}
+
+.tableContainer {
   overflow-x: auto;
+  border-top: 1px solid #eee;
+  border-bottom: 1px solid #eee;
 }
 
 .table {
   width: 100%;
   border-collapse: collapse;
+  min-width: 720px;
+  font-size: 14px;
+  background: white;
 }
 
-.th, .td {
-  padding: 12px 16px;
-  font-size: 14px;
+.table th,
+.table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  vertical-align: middle;
+  user-select: none;
+}
+
+.table th {
+  font-weight: 600;
+  color: #666;
+  cursor: pointer;
+  white-space: nowrap;
+  position: relative;
+}
+
+.sortIndicator {
+  margin-left: 6px;
+  font-size: 10px;
+  user-select: none;
+}
+
+.checkbox {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.rating {
+  display: inline-block;
+  min-width: 40px;
+  text-align: center;
+  font-weight: 600;
+  color: #222;
+  user-select: none;
+}
+
+.rating.low {
+  color: red;
+}
+
+.price {
+  font-weight: 600;
   white-space: nowrap;
 }
 
-.th {
-  text-align: left;
-  font-weight: 600;
-  color: #555;
-  cursor: pointer;
-  user-select: none;
-  border-bottom: 2px solid #eee;
-}
-
-.td {
-  color: #333;
-  border-bottom: 1px solid #eee;
-}
-
-.tdCheckbox {
+.quantity {
   text-align: center;
-  width: 40px;
-  padding: 12px 12px;
+  font-size: 18px;
+  color: #444;
 }
 
-.ratingLow {
-  color: red;
-  font-weight: 700;
-}
-
-.actionBtn {
-  background: none;
-  border: none;
+.loadMore {
+  margin-top: 12px;
+  font-weight: 500;
   color: #0055ff;
   cursor: pointer;
-  font-weight: 600;
+  user-select: none;
+}
+
+.progressBarContainer {
+  height: 3px;
+  width: 100%;
+  background-color: #e6e6e6;
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.progressBar {
+  height: 100%;
+  background-color: #0055ff;
+  animation: loading 1.5s infinite linear;
+}
+
+@keyframes loading {
+  0% {
+    margin-left: -100%;
+    width: 100%;
+  }
+  50% {
+    margin-left: 0%;
+    width: 100%;
+  }
+  100% {
+    margin-left: 100%;
+    width: 100%;
+  }
 }
 
 .pagination {
-  margin-top: 20px;
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
+  margin-top: 16px;
   gap: 8px;
+  user-select: none;
 }
 
-.paginationBtn {
+.pageButton {
+  border: 1px solid #ccc;
+  background-color: white;
+  color: #444;
+  font-weight: 600;
   padding: 6px 12px;
   border-radius: 6px;
-  border: 1px solid #ccc;
-  background-color: #fff;
   cursor: pointer;
-  user-select: none;
-  font-size: 16px;
+  transition: background-color 0.2s ease;
 }
 
-.paginationBtn[disabled] {
-  opacity: 0.5;
-  cursor: not-allowed;
+.pageButton:hover {
+  background-color: #f0f0f0;
+}
+
+.pageButton.active {
+  background-color: #0055ff;
+  color: white;
+  border-color: #0055ff;
+}
+
+.toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background-color: #0055ff;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgb(0 85 255 / 0.6);
+  font-weight: 600;
+  user-select: none;
+  opacity: 0.95;
+  z-index: 1000;
+}
+
+.modalBackdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.3);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+
+.modalContent {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  width: 400px;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+}
+
+.modalTitle {
+  font-weight: 700;
+  font-size: 20px;
+  margin-bottom: 16px;
+}
+
+.modalLabel {
+  margin-top: 12px;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.modalInput {
+  width: 100%;
+  height: 36px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  padding: 0 10px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.modalButtons {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.modalButton {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: background-color 0.2s ease;
+}
+
+.modalButton.cancel {
+  background-color: #eee;
+  color: #555;
+}
+
+.modalButton.cancel:hover {
+  background-color: #ddd;
+}
+
+.modalButton.submit {
+  background-color: #0055ff;
+  color: white;
+}
+
+.modalButton.submit:hover {
+  background-color: #003dbf;
 }
