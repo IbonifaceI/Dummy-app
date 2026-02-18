@@ -29,6 +29,7 @@ type ProductSortable = {
 };
 
 const ITEMS_PER_PAGE = 10;
+const SORT_STORAGE_KEY = "productlist_sortstate";
 
 function fakeSkuFromId(id: number): string {
   return "SKU" + id.toString().padStart(5, "0");
@@ -43,23 +44,61 @@ export const ProductList: React.FC = () => {
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<SortState>({ column: null, order: null });
 
+  // Восстановить сортировку из localStorage при старте
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SORT_STORAGE_KEY);
+      if (saved) {
+        const parsed: unknown = JSON.parse(saved);
+
+        // Проверка безопасности типов и валидности
+        if (
+          typeof parsed === "object" &&
+          parsed !== null &&
+          ("column" in parsed) &&
+          ("order" in parsed)
+        ) {
+          const parsedSort = parsed as SortState;
+          const isColumnValid =
+            parsedSort.column === null ||
+            ["title", "brand", "sku", "rating", "price", "stock"].includes(parsedSort.column ?? "");
+          const isOrderValid =
+            parsedSort.order === null || parsedSort.order === "asc" || parsedSort.order === "desc";
+          if (isColumnValid && isOrderValid) {
+            setSort({
+              column: parsedSort.column,
+              order: parsedSort.order,
+            });
+          }
+        }
+      }
+    } catch {
+    }
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify(sort));
+  }, [sort]);
+
+  // Подгрузка товаров с учётом поиска и пагинации
   useEffect(() => {
     const fetchProducts = async () => {
       setLoading(true);
       try {
         const skip = (page - 1) * ITEMS_PER_PAGE;
+        const baseUrl = "https://dummyjson.com/products";
         const url = search.trim()
-          ? `https://dummyjson.com/products/search?q=${encodeURIComponent(search)}&limit=${ITEMS_PER_PAGE}&skip=${skip}`
-          : `https://dummyjson.com/products?limit=${ITEMS_PER_PAGE}&skip=${skip}`;
+          ? `${baseUrl}/search?q=${encodeURIComponent(search)}&limit=${ITEMS_PER_PAGE}&skip=${skip}`
+          : `${baseUrl}?limit=${ITEMS_PER_PAGE}&skip=${skip}`;
         const res = await fetch(url);
         const data = await res.json();
+
         if (!res.ok) throw new Error(data.message || "Ошибка загрузки товаров");
 
-        const prodsWithSku = data.products.map((p: Product) => ({
+        const prodsWithSku: Product[] = data.products.map((p: Product) => ({
           ...p,
           sku: p.sku || fakeSkuFromId(p.id),
         }));
-
         setProducts(prodsWithSku);
       } catch (e: any) {
         console.error("Ошибка загрузки", e.message);
@@ -68,9 +107,11 @@ export const ProductList: React.FC = () => {
         setLoading(false);
       }
     };
+
     fetchProducts();
   }, [page, search]);
 
+  // Обработчик клика по заголовку таблицы - смена/сброс сортировки
   const handleSort = (column: keyof ProductSortable) => {
     if (sort.column === column) {
       if (sort.order === "asc") {
@@ -83,26 +124,38 @@ export const ProductList: React.FC = () => {
     }
   };
 
-  const sortedProducts = useMemo(() => {
-    if (!sort.column || !sort.order) return products;
+const sortedProducts = useMemo(() => {
+  if (!sort.column || !sort.order) return products;
+  const column = sort.column!;
 
-    return [...products].sort((a, b) => {
-      let aValue: any = a[sort.column!];
-      let bValue: any = b[sort.column!];
+  return [...products].sort((a, b) => {
+    // Берём значения для сортировки, если нет - ставим пустую строку
+    let aValue: string | number = a[column] ?? "";
+    let bValue: string | number = b[column] ?? "";
 
-      if (typeof aValue === "string" && !["sku", "title", "brand"].includes(sort.column!)) {
-        aValue = Number(aValue);
-      }
-      if (typeof bValue === "string" && !["sku", "title", "brand"].includes(sort.column!)) {
-        bValue = Number(bValue);
-      }
+    // Приводим строки к числам, если колонка не из перечисленных
+    if (
+      typeof aValue === "string" &&
+      !["sku", "title", "brand"].includes(column)
+    ) {
+      const parsedA = Number(aValue);
+      aValue = isNaN(parsedA) ? aValue : parsedA;
+    }
+    if (
+      typeof bValue === "string" &&
+      !["sku", "title", "brand"].includes(column)
+    ) {
+      const parsedB = Number(bValue);
+      bValue = isNaN(parsedB) ? bValue : parsedB;
+    }
 
-      if (aValue > bValue) return sort.order === "asc" ? 1 : -1;
-      if (aValue < bValue) return sort.order === "asc" ? -1 : 1;
-      return 0;
-    });
-  }, [products, sort]);
+    if (aValue > bValue) return sort.order === "asc" ? 1 : -1;
+    if (aValue < bValue) return sort.order === "asc" ? -1 : 1;
+    return 0;
+  });
+}, [products, sort]);
 
+  // Индикатор сортировки (стрелка) в заголовке таблицы
   const renderSortIndicator = (col: keyof ProductSortable) => {
     if (sort.column !== col) return null;
     if (sort.order === "asc") return <span className={styles.sortIndicator}>▲</span>;
@@ -127,17 +180,20 @@ export const ProductList: React.FC = () => {
           }}
           aria-label="Выйти из аккаунта"
           title="Выйти"
+          type="button"
         >
           Выйти
         </button>
       </div>
 
+      {/* Прогресс бар загрузки */}
       {loading && (
         <div className={styles.progressBarContainer}>
           <div className={styles.progressBar} />
         </div>
       )}
 
+      {/* Заголовок, поиск, кнопка Добавить */}
       <div className={styles.header}>
         <h2 className={styles.title}>Товары</h2>
 
@@ -158,12 +214,14 @@ export const ProductList: React.FC = () => {
             title="Добавить товар"
             className={styles.buttonAdd}
             onClick={() => alert("Открыть форму добавления товара")}
+            type="button"
           >
             Добавить
           </button>
         </div>
       </div>
 
+      {/* Таблица товаров */}
       <div className={styles.tableContainer}>
         <table className={styles.table}>
           <thead>
@@ -234,6 +292,7 @@ export const ProductList: React.FC = () => {
                     }}
                     onClick={() => alert(`Добавить товар ${product.title} в корзину`)}
                     title="Добавить товар"
+                    type="button"
                   >
                     +
                   </button>
@@ -251,6 +310,7 @@ export const ProductList: React.FC = () => {
                     aria-label="Открыть меню действий"
                     title="Дополнительные действия"
                     onClick={() => alert(`Открыть меню действий для "${product.title}"`)}
+                    type="button"
                   >
                     ⋯
                   </button>
@@ -269,6 +329,7 @@ export const ProductList: React.FC = () => {
               className={`${styles.pageButton} ${page === i + 1 ? styles.active : ""}`}
               onClick={() => setPage(i + 1)}
               aria-label={`Перейти на страницу ${i + 1}`}
+              type="button"
             >
               {i + 1}
             </button>
