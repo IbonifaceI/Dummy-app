@@ -1,37 +1,39 @@
-import React, { useState } from 'react';
-import styles from './LoginForm.module.css';
-import { useAuth } from '../context/AuthContext';
+import React, { useState } from "react";
+import styles from "./LoginForm.module.css";
+import { useAuth } from "../context/AuthContext";
 
-export const LoginForm: React.FC = () => {
+interface LoginFormProps {
+  onLoginSuccess: () => void;
+}
+
+export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
   const { login, loading } = useAuth();
 
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     setError(null);
     setSuccess(null);
 
     if (!username || !password) {
-      setError('Пожалуйста, заполните все поля');
+      setError("Пожалуйста, заполните все поля");
       return;
     }
 
     try {
       await login(username, password, rememberMe);
-      setSuccess('Успешная авторизация!');
-      // Очистка полей опционально:
-      // setUsername('');
-      // setPassword('');
-      // Спрятать уведомление через 3 секунды
-      setTimeout(() => setSuccess(null), 3000);
+      setSuccess("Успешная авторизация!");
+      setTimeout(() => {
+        setSuccess(null);
+        onLoginSuccess();
+      }, 800);
     } catch (err: any) {
-      setError(err.message || 'Ошибка при авторизации');
+      setError(err.message || "Ошибка при авторизации");
     }
   };
 
@@ -53,7 +55,7 @@ export const LoginForm: React.FC = () => {
           type="text"
           className={styles.input}
           value={username}
-          onChange={e => setUsername(e.target.value)}
+          onChange={(e) => setUsername(e.target.value)}
           placeholder="Введите почту"
           autoComplete="username"
           required
@@ -68,7 +70,7 @@ export const LoginForm: React.FC = () => {
           type="password"
           className={styles.input}
           value={password}
-          onChange={e => setPassword(e.target.value)}
+          onChange={(e) => setPassword(e.target.value)}
           placeholder="Введите пароль"
           autoComplete="current-password"
           required
@@ -80,7 +82,7 @@ export const LoginForm: React.FC = () => {
             id="rememberMe"
             type="checkbox"
             checked={rememberMe}
-            onChange={e => setRememberMe(e.target.checked)}
+            onChange={(e) => setRememberMe(e.target.checked)}
             disabled={loading}
           />
           <label htmlFor="rememberMe" className={styles.checkboxLabel}>
@@ -93,12 +95,12 @@ export const LoginForm: React.FC = () => {
           className={loading ? styles.buttonDisabled : styles.button}
           disabled={loading}
         >
-          {loading ? 'Вход...' : 'Войти'}
+          {loading ? "Вход..." : "Войти"}
         </button>
 
         <p className={styles.registerText}>
-          Нет аккаунта?{' '}
-          <a href="#" className={styles.registerLink} onClick={e => e.preventDefault()}>
+          Нет аккаунта?{" "}
+          <a href="#" className={styles.registerLink} onClick={(e) => e.preventDefault()}>
             Создать
           </a>
         </p>
@@ -106,5 +108,3 @@ export const LoginForm: React.FC = () => {
     </div>
   );
 };
-
-export default LoginForm;

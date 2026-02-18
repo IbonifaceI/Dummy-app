@@ -1,45 +1,47 @@
-import React from 'react';
+import React, { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from './components/context/AuthContext';
 import { LoginForm } from './components/LoginForm/LoginForm';
 import { ProductList } from './components/ProductList/ProductList';
+const AppContent = () => {
+  const { user, loading } = useAuth();
+  const [isLoggedIn, setLoggedIn] = useState(false);
 
-const AppContent: React.FC = () => {
-  const { user, token, logout } = useAuth();
+  useEffect(() => {
+    if (!loading) {
+      setLoggedIn(!!user);
+    }
+  }, [user, loading]);
 
-  if (!token || !user) {
-    return <LoginForm />;
-  }
-
-  return (
-    <div style={{ maxWidth: 960, margin: '20px auto', padding: 16 }}>
-      <header
+  if (loading) {
+    return (
+      <div
         style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          marginBottom: 20,
-          alignItems: 'center',
+          height: "100vh",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          fontSize: 24,
+          fontWeight: "bold",
         }}
       >
-        <div>
-          Привет, <b>{user.firstName} {user.lastName}</b>!
-        </div>
-        <button
-          onClick={logout}
-          style={{ padding: '6px 12px', cursor: 'pointer' }}
-        >
-          Выйти
-        </button>
-      </header>
+        Загрузка...
+      </div>
+    );
+  }
 
-      <ProductList />
-    </div>
-  );
+  if (!isLoggedIn) {
+    return <LoginForm onLoginSuccess={() => setLoggedIn(true)} />;
+  }
+
+  return <ProductList />;
 };
 
-const App: React.FC = () => (
-  <AuthProvider>
-    <AppContent />
-  </AuthProvider>
-);
+export const App = () => {
+  return (
+    <AuthProvider>
+      <AppContent />
+    </AuthProvider>
+  );
+};
 
 export default App;

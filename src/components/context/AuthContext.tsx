@@ -1,115 +1,106 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 
 interface User {
   id: number;
   username: string;
-  email: string;
-  firstName: string;
-  lastName: string;
-  gender: string;
-  image: string;
+  token: string;
+  // Можно добавить другие поля пользователя
 }
 
 interface AuthContextType {
   user: User | null;
-  token: string | null;
-  login: (username: string, password: string, rememberMe: boolean) => Promise<void>;
-  logout: () => void;
   loading: boolean;
+  login: (username: string, password: string, remember: boolean) => Promise<void>;
+  logout: () => void;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  loading: true,
+  login: async () => {},
+  logout: () => {},
+});
 
-const AUTH_TOKEN_KEY = 'authToken';
-const AUTH_USER_KEY = 'authUser';
+const STORAGE_KEY = "dummyjson_token";
 
-const API_AUTH_URL = 'https://dummyjson.com/auth/login';
+export const useAuth = () => useContext(AuthContext);
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
+interface AuthProviderProps {
+  children: ReactNode;
+}
+
+export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
+  // Восстановление сессии при монтировании
   useEffect(() => {
-    const savedToken =
-      localStorage.getItem(AUTH_TOKEN_KEY) || sessionStorage.getItem(AUTH_TOKEN_KEY);
-    const savedUser =
-      localStorage.getItem(AUTH_USER_KEY) || sessionStorage.getItem(AUTH_USER_KEY);
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(JSON.parse(savedUser));
-      console.log('Restored session from storage', savedToken, savedUser);
+    const token =
+      sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
+    if (token) {
+      // Можно попробовать в реальном API проверить токен,
+      // но DummyJSON — для примера
+      setUser({
+        id: -1,
+        username: "user",
+        token,
+      });
     }
+    setLoading(false);
   }, []);
 
-  const login = async (username: string, password: string, rememberMe: boolean) => {
-    console.log('login called:', { username, password, rememberMe });
-    setLoading(true);
-    try {
-      const response = await fetch(API_AUTH_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
+  const login = async (
+    username: string,
+    password: string,
+    remember: boolean
+  ) => {
+    // Пример вызова API DummyJSON Auth: https://dummyjson.com/docs/auth
+    const url = "https://dummyjson.com/auth/login";
+    const body = {
+      username,
+      password,
+    };
 
-      const data = await response.json();
+    const response = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
 
-      if (!response.ok) {
-        throw new Error(data.message || 'Ошибка авторизации');
-      }
-
-      const userData: User = {
-        id: data.id,
-        username: data.username,
-        email: data.email,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        gender: data.gender,
-        image: data.image,
-      };
-
-      setUser(userData);
-      setToken(data.token);
-
-      // Очищаем старые данные
-      localStorage.removeItem(AUTH_TOKEN_KEY);
-      localStorage.removeItem(AUTH_USER_KEY);
-      sessionStorage.removeItem(AUTH_TOKEN_KEY);
-      sessionStorage.removeItem(AUTH_USER_KEY);
-
-      if (rememberMe) {
-        localStorage.setItem(AUTH_TOKEN_KEY, data.token);
-        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(userData));
-      } else {
-        sessionStorage.setItem(AUTH_TOKEN_KEY, data.token);
-        sessionStorage.setItem(AUTH_USER_KEY, JSON.stringify(userData));
-      }
-      console.log('login successful', userData);
-    } finally {
-      setLoading(false);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || "Ошибка авторизации");
     }
+
+    const data = await response.json();
+
+    // Сохраняем токен
+    if (remember) {
+      localStorage.setItem(STORAGE_KEY, data.token);
+      sessionStorage.removeItem(STORAGE_KEY);
+    } else {
+      sessionStorage.setItem(STORAGE_KEY, data.token);
+      localStorage.removeItem(STORAGE_KEY);
+    }
+
+    setUser({
+      id: data.id,
+      username: data.username,
+      token: data.token,
+    });
   };
 
   const logout = () => {
+    sessionStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
     setUser(null);
-    setToken(null);
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    localStorage.removeItem(AUTH_USER_KEY);
-    sessionStorage.removeItem(AUTH_TOKEN_KEY);
-    sessionStorage.removeItem(AUTH_USER_KEY);
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
-};
-
-export const useAuth = (): AuthContextType => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth должен использоваться внутри AuthProvider');
-  }
-  return context;
 };
