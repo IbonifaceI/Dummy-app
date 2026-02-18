@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import styles from "./ProductList.module.css";
+import { useAuth } from "../context/AuthContext";
 
 interface Product {
   id: number;
@@ -34,6 +35,8 @@ function fakeSkuFromId(id: number): string {
 }
 
 export const ProductList: React.FC = () => {
+  const { logout } = useAuth();
+
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -46,9 +49,7 @@ export const ProductList: React.FC = () => {
       try {
         const skip = (page - 1) * ITEMS_PER_PAGE;
         const url = search.trim()
-          ? `https://dummyjson.com/products/search?q=${encodeURIComponent(
-              search
-            )}&limit=${ITEMS_PER_PAGE}&skip=${skip}`
+          ? `https://dummyjson.com/products/search?q=${encodeURIComponent(search)}&limit=${ITEMS_PER_PAGE}&skip=${skip}`
           : `https://dummyjson.com/products?limit=${ITEMS_PER_PAGE}&skip=${skip}`;
         const res = await fetch(url);
         const data = await res.json();
@@ -72,7 +73,6 @@ export const ProductList: React.FC = () => {
 
   const handleSort = (column: keyof ProductSortable) => {
     if (sort.column === column) {
-      // переключаем порядок asc -> desc -> none
       if (sort.order === "asc") {
         setSort({ column, order: "desc" });
       } else if (sort.order === "desc") {
@@ -90,17 +90,10 @@ export const ProductList: React.FC = () => {
       let aValue: any = a[sort.column!];
       let bValue: any = b[sort.column!];
 
-      // При необходимости кастим в число
-      if (
-        typeof aValue === "string" &&
-        !["sku", "title", "brand"].includes(sort.column!)
-      ) {
+      if (typeof aValue === "string" && !["sku", "title", "brand"].includes(sort.column!)) {
         aValue = Number(aValue);
       }
-      if (
-        typeof bValue === "string" &&
-        !["sku", "title", "brand"].includes(sort.column!)
-      ) {
+      if (typeof bValue === "string" && !["sku", "title", "brand"].includes(sort.column!)) {
         bValue = Number(bValue);
       }
 
@@ -119,6 +112,26 @@ export const ProductList: React.FC = () => {
 
   return (
     <div className={styles.wrapper}>
+      {/* Кнопка выхода */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+        <button
+          onClick={() => logout()}
+          style={{
+            padding: "8px 16px",
+            cursor: "pointer",
+            backgroundColor: "#e74c3c",
+            color: "white",
+            border: "none",
+            borderRadius: 6,
+            fontWeight: "bold",
+          }}
+          aria-label="Выйти из аккаунта"
+          title="Выйти"
+        >
+          Выйти
+        </button>
+      </div>
+
       {loading && (
         <div className={styles.progressBarContainer}>
           <div className={styles.progressBar} />
@@ -248,7 +261,6 @@ export const ProductList: React.FC = () => {
         </table>
       </div>
 
-      {/* Убираем пагинацию во время поиска */}
       {!search.trim() && (
         <div className={styles.pagination}>
           {Array.from({ length: 10 }).map((_, i) => (
