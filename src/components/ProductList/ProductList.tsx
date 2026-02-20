@@ -28,90 +28,179 @@ type ProductSortable = {
   stock: number;
 };
 
-const ITEMS_PER_PAGE = 10;
 const SORT_STORAGE_KEY = "productlist_sortstate";
+const ITEMS_PER_PAGE = 10;
 
 function fakeSkuFromId(id: number): string {
   return "SKU" + id.toString().padStart(5, "0");
 }
+
+const getInitialSort = (): SortState => {
+  try {
+    const saved = localStorage.getItem(SORT_STORAGE_KEY);
+    if (!saved) return { column: null, order: null };
+    const parsed: SortState = JSON.parse(saved);
+
+    const validColumns = [
+      "title",
+      "brand",
+      "sku",
+      "rating",
+      "price",
+      "stock",
+      null,
+    ];
+    const validOrders = ["asc", "desc", null];
+
+    if (
+      validColumns.includes(parsed.column) &&
+      validOrders.includes(parsed.order)
+    ) {
+      return parsed;
+    }
+  } catch {
+    // игнорируем ошибки
+  }
+  return { column: null, order: null };
+};
 
 export const ProductList: React.FC = () => {
   const { logout } = useAuth();
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
+
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [sort, setSort] = useState<SortState>({ column: null, order: null });
+  const [total, setTotal] = useState(0);
 
-  // Восстановить сортировку из localStorage при старте
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(SORT_STORAGE_KEY);
-      if (saved) {
-        const parsed: unknown = JSON.parse(saved);
+  // **Состояние сортировки инициализируем лениво из localStorage**
+  const [sort, setSort] = useState<SortState>(getInitialSort);
 
-        // Проверка безопасности типов и валидности
-        if (
-          typeof parsed === "object" &&
-          parsed !== null &&
-          ("column" in parsed) &&
-          ("order" in parsed)
-        ) {
-          const parsedSort = parsed as SortState;
-          const isColumnValid =
-            parsedSort.column === null ||
-            ["title", "brand", "sku", "rating", "price", "stock"].includes(parsedSort.column ?? "");
-          const isOrderValid =
-            parsedSort.order === null || parsedSort.order === "asc" || parsedSort.order === "desc";
-          if (isColumnValid && isOrderValid) {
-            setSort({
-              column: parsedSort.column,
-              order: parsedSort.order,
-            });
-          }
-        }
-      }
-    } catch {
-    }
-  }, []);
-
+  // Сохраняем сортировку в localStorage при её изменении
   useEffect(() => {
     localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify(sort));
   }, [sort]);
 
-  // Подгрузка товаров с учётом поиска и пагинации
-  useEffect(() => {
-    const fetchProducts = async () => {
-      setLoading(true);
-      try {
-        const skip = (page - 1) * ITEMS_PER_PAGE;
-        const baseUrl = "https://dummyjson.com/products";
-        const url = search.trim()
-          ? `${baseUrl}/search?q=${encodeURIComponent(search)}&limit=${ITEMS_PER_PAGE}&skip=${skip}`
-          : `${baseUrl}?limit=${ITEMS_PER_PAGE}&skip=${skip}`;
+  const fetchPageProducts = async (pageNum: number) => {
+    setLoading(true);
+    try {
+      const skip = (pageNum - 1) * ITEMS_PER_PAGE;
+      const url = `https://dummyjson.com/products?limit=${ITEMS_PER_PAGE}&skip=${skip}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Ошибка загрузки товаров");
+
+      const prodsWithSku: Product[] = data.products.map((p: Product) => ({
+        ...p,
+        sku: p.sku || fakeSkuFromId(p.id),
+      }));
+      setProducts(prodsWithSku);
+      setTotal(data.total);
+    } catch (e: any) {
+      console.error("Ошибка загрузки", e.message);
+      setProducts([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchAllSearchProducts = async (query: string) => {
+    setLoading(true);
+    try {
+      let allProducts: Product[] = [];
+      const limit = 100;
+      let skip = 0;
+
+      while (true) {
+        const url = `https://dummyjson.com/products/search?q=${encodeURIComponent(
+          query,
+        )}&limit=${limit}&skip=${skip}`;
+
         const res = await fetch(url);
         const data = await res.json();
 
         if (!res.ok) throw new Error(data.message || "Ошибка загрузки товаров");
 
-        const prodsWithSku: Product[] = data.products.map((p: Product) => ({
+        const fetchedProducts = (data.products as Product[]).map((p) => ({
           ...p,
           sku: p.sku || fakeSkuFromId(p.id),
         }));
-        setProducts(prodsWithSku);
-      } catch (e: any) {
-        console.error("Ошибка загрузки", e.message);
-        setProducts([]);
-      } finally {
-        setLoading(false);
+
+        allProducts = [...allProducts, ...fetchedProducts];
+
+        if (allProducts.length >= data.total) {
+          break;
+        }
+        skip += limit;
       }
-    };
 
-    fetchProducts();
-  }, [page, search]);
+      const lowerQuery = query.trim().toLowerCase();
+      allProducts = allProducts.filter((p) =>
+        p.title.toLowerCase().includes(lowerQuery),
+      );
 
-  // Обработчик клика по заголовку таблицы - смена/сброс сортировки
+      setProducts(allProducts);
+      setTotal(allProducts.length);
+    } catch (e: any) {
+      console.error("Ошибка поисковой загрузки", e.message);
+      setProducts([]);
+      setTotal(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (search.trim()) {
+      fetchAllSearchProducts(search.trim());
+      setPage(1);
+    } else {
+      fetchPageProducts(page);
+    }
+  }, [search, page]);
+
+  const sortedProducts = useMemo(() => {
+    if (!sort.column || !sort.order) return products;
+
+    const column = sort.column;
+
+    return [...products].sort((a, b) => {
+      let aValue: string | number | undefined = a[column];
+      let bValue: string | number | undefined = b[column];
+
+      if (aValue === undefined) aValue = "";
+      if (bValue === undefined) bValue = "";
+
+      if (
+        typeof aValue === "string" &&
+        !["sku", "title", "brand"].includes(column)
+      ) {
+        const parsedA = Number(aValue);
+        aValue = isNaN(parsedA) ? aValue : parsedA;
+      }
+      if (
+        typeof bValue === "string" &&
+        !["sku", "title", "brand"].includes(column)
+      ) {
+        const parsedB = Number(bValue);
+        bValue = isNaN(parsedB) ? bValue : parsedB;
+      }
+
+      if (aValue > bValue) return sort.order === "asc" ? 1 : -1;
+      if (aValue < bValue) return sort.order === "asc" ? -1 : 1;
+      return 0;
+    });
+  }, [products, sort]);
+
+  const renderSortIndicator = (col: keyof ProductSortable) => {
+    if (sort.column !== col) return null;
+    if (sort.order === "asc") return <span className={styles.sortIndicator}>▲</span>;
+    if (sort.order === "desc") return <span className={styles.sortIndicator}>▼</span>;
+    return null;
+  };
+
   const handleSort = (column: keyof ProductSortable) => {
     if (sort.column === column) {
       if (sort.order === "asc") {
@@ -124,48 +213,10 @@ export const ProductList: React.FC = () => {
     }
   };
 
-const sortedProducts = useMemo(() => {
-  if (!sort.column || !sort.order) return products;
-  const column = sort.column!;
-
-  return [...products].sort((a, b) => {
-    // Берём значения для сортировки, если нет - ставим пустую строку
-    let aValue: string | number = a[column] ?? "";
-    let bValue: string | number = b[column] ?? "";
-
-    // Приводим строки к числам, если колонка не из перечисленных
-    if (
-      typeof aValue === "string" &&
-      !["sku", "title", "brand"].includes(column)
-    ) {
-      const parsedA = Number(aValue);
-      aValue = isNaN(parsedA) ? aValue : parsedA;
-    }
-    if (
-      typeof bValue === "string" &&
-      !["sku", "title", "brand"].includes(column)
-    ) {
-      const parsedB = Number(bValue);
-      bValue = isNaN(parsedB) ? bValue : parsedB;
-    }
-
-    if (aValue > bValue) return sort.order === "asc" ? 1 : -1;
-    if (aValue < bValue) return sort.order === "asc" ? -1 : 1;
-    return 0;
-  });
-}, [products, sort]);
-
-  // Индикатор сортировки (стрелка) в заголовке таблицы
-  const renderSortIndicator = (col: keyof ProductSortable) => {
-    if (sort.column !== col) return null;
-    if (sort.order === "asc") return <span className={styles.sortIndicator}>▲</span>;
-    if (sort.order === "desc") return <span className={styles.sortIndicator}>▼</span>;
-    return null;
-  };
+  const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
 
   return (
     <div className={styles.wrapper}>
-      {/* Кнопка выхода */}
       <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
         <button
           onClick={() => logout()}
@@ -186,14 +237,12 @@ const sortedProducts = useMemo(() => {
         </button>
       </div>
 
-      {/* Прогресс бар загрузки */}
       {loading && (
         <div className={styles.progressBarContainer}>
           <div className={styles.progressBar} />
         </div>
       )}
 
-      {/* Заголовок, поиск, кнопка Добавить */}
       <div className={styles.header}>
         <h2 className={styles.title}>Товары</h2>
 
@@ -202,11 +251,9 @@ const sortedProducts = useMemo(() => {
           placeholder="Найти"
           className={styles.searchInput}
           value={search}
-          onChange={(e) => {
-            setPage(1);
-            setSearch(e.target.value);
-          }}
+          onChange={(e) => setSearch(e.target.value)}
           aria-label="Поиск товаров"
+          autoComplete="off"
         />
 
         <div className={styles.buttons}>
@@ -221,13 +268,16 @@ const sortedProducts = useMemo(() => {
         </div>
       </div>
 
-      {/* Таблица товаров */}
       <div className={styles.tableContainer}>
         <table className={styles.table}>
           <thead>
             <tr>
               <th>
-                <input type="checkbox" className={styles.checkbox} aria-label="Выбрать все" />
+                <input
+                  type="checkbox"
+                  className={styles.checkbox}
+                  aria-label="Выбрать все"
+                />
               </th>
               <th onClick={() => handleSort("title")} role="button" tabIndex={0}>
                 Наименование {renderSortIndicator("title")}
@@ -272,11 +322,15 @@ const sortedProducts = useMemo(() => {
                 <td>{product.brand}</td>
                 <td>{product.sku}</td>
                 <td>
-                  <span className={`${styles.rating} ${product.rating < 3 ? styles.low : ""}`}>
+                  <span
+                    className={`${styles.rating} ${
+                      product.rating < 3 ? styles.low : ""
+                    }`}
+                  >
                     {product.rating.toFixed(2)}
                   </span>
                 </td>
-                <td className={styles.price}>{product.price.toLocaleString()} ₽</td>
+                <td className={styles.price}>{product.price.toLocaleString("ru-RU")} ₽</td>
                 <td className={styles.quantity}>{product.stock}</td>
                 <td>
                   <button
@@ -296,7 +350,6 @@ const sortedProducts = useMemo(() => {
                   >
                     +
                   </button>
-
                   <button
                     style={{
                       backgroundColor: "transparent",
@@ -321,19 +374,58 @@ const sortedProducts = useMemo(() => {
         </table>
       </div>
 
-      {!search.trim() && (
-        <div className={styles.pagination}>
-          {Array.from({ length: 10 }).map((_, i) => (
-            <button
-              key={i}
-              className={`${styles.pageButton} ${page === i + 1 ? styles.active : ""}`}
-              onClick={() => setPage(i + 1)}
-              aria-label={`Перейти на страницу ${i + 1}`}
-              type="button"
-            >
-              {i + 1}
-            </button>
-          ))}
+      {!search.trim() && totalPages > 1 && (
+        <div
+          className={styles.pagination}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            marginTop: 20,
+            gap: 12,
+          }}
+          aria-label="Пагинация товаров"
+        >
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+            aria-label="Предыдущая страница"
+            style={{
+              cursor: page === 1 ? "not-allowed" : "pointer",
+              padding: "8px 12px",
+              fontSize: 18,
+              borderRadius: 6,
+              border: "1px solid #ccc",
+              backgroundColor: page === 1 ? "#eee" : "white",
+            }}
+          >
+            ‹
+          </button>
+
+          <span
+            aria-live="polite"
+            style={{ minWidth: 60, textAlign: "center", fontWeight: "bold", fontSize: 16 }}
+          >
+            {page} / {totalPages}
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            aria-label="Следующая страница"
+            style={{
+              cursor: page === totalPages ? "not-allowed" : "pointer",
+              padding: "8px 12px",
+              fontSize: 18,
+              borderRadius: 6,
+              border: "1px solid #ccc",
+              backgroundColor: page === totalPages ? "#eee" : "white",
+            }}
+          >
+            ›
+          </button>
         </div>
       )}
     </div>
