@@ -29,7 +29,7 @@ type ProductSortable = {
 };
 
 const SORT_STORAGE_KEY = "productlist_sortstate";
-const ITEMS_PER_PAGE = 10;
+const ITEMS_PER_PAGE = 20;
 
 function fakeSkuFromId(id: number): string {
   return "SKU" + id.toString().padStart(5, "0");
@@ -59,10 +59,14 @@ const getInitialSort = (): SortState => {
       return parsed;
     }
   } catch {
-    // игнорируем ошибки
   }
   return { column: null, order: null };
 };
+
+interface Toast {
+  id: number;
+  message: string;
+}
 
 export const ProductList: React.FC = () => {
   const { logout } = useAuth();
@@ -74,10 +78,20 @@ export const ProductList: React.FC = () => {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
 
-  // **Состояние сортировки инициализируем лениво из localStorage**
   const [sort, setSort] = useState<SortState>(getInitialSort);
 
-  // Сохраняем сортировку в localStorage при её изменении
+  // Toast уведомления
+  const [toasts, setToasts] = useState<Toast[]>([]);
+
+  // Модалка добавления товара
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [newProduct, setNewProduct] = useState({
+    title: "",
+    price: "",
+    brand: "",
+    sku: "",
+  });
+
   useEffect(() => {
     localStorage.setItem(SORT_STORAGE_KEY, JSON.stringify(sort));
   }, [sort]);
@@ -215,13 +229,74 @@ export const ProductList: React.FC = () => {
 
   const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
 
+  // Toast helper
+  const addToast = (message: string) => {
+    const id = Date.now();
+    setToasts((t) => [...t, { id, message }]);
+    setTimeout(() => {
+      setToasts((t) => t.filter((toast) => toast.id !== id));
+    }, 3000);
+  };
+
+  // Обработка добавления товара
+  const onAddSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (
+      !newProduct.title.trim() ||
+      !newProduct.price.trim() ||
+      !newProduct.brand.trim() ||
+      !newProduct.sku.trim()
+    ) {
+      alert("Пожалуйста, заполните все поля");
+      return;
+    }
+
+    addToast(`Товар "${newProduct.title}" успешно добавлен!`);
+    setIsAddOpen(false);
+    setNewProduct({ title: "", price: "", brand: "", sku: "" });
+  };
+
+  const onPageClick = (p: number) => {
+    if (p !== page && p >= 1 && p <= totalPages) {
+      setPage(p);
+    }
+  };
+
+  const renderPageNumbers = () => {
+    const pages = [];
+    let startPage = Math.max(1, page - 2);
+    let endPage = Math.min(totalPages, startPage + 4);
+    if (endPage - startPage < 4) {
+      startPage = Math.max(1, endPage - 4);
+    }
+
+    for (let p = startPage; p <= endPage; p++) {
+      pages.push(
+        <button
+          key={p}
+          type="button"
+          onClick={() => onPageClick(p)}
+          className={`${styles.pageButton} ${p === page ? styles.activePage : ""}`}
+          aria-current={p === page ? "page" : undefined}
+          aria-label={`Перейти на страницу ${p}`}
+        >
+          {p}
+        </button>,
+      );
+    }
+    return pages;
+  };
+
   return (
-    <div className={styles.wrapper}>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+    <div className={styles.wrapper} style={{ maxWidth: 1200, margin: "0 auto", padding: "0 20px" }}>
+  
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 32 }}>
         <button
           onClick={() => logout()}
           style={{
             padding: "8px 16px",
+            marginTop: 10,
             cursor: "pointer",
             backgroundColor: "#e74c3c",
             color: "white",
@@ -237,12 +312,16 @@ export const ProductList: React.FC = () => {
         </button>
       </div>
 
-      {loading && (
-        <div className={styles.progressBarContainer}>
-          <div className={styles.progressBar} />
-        </div>
-      )}
+      {/* Прогресс бар с отведенным местом */}
+      <div style={{ height: 5, marginBottom: 20 }}>
+        {loading && (
+          <div className={styles.progressBarContainer}>
+            <div className={styles.progressBar} />
+          </div>
+        )}
+      </div>
 
+      {/* Заголовок + поиск + кнопка добавить */}
       <div className={styles.header}>
         <h2 className={styles.title}>Товары</h2>
 
@@ -260,7 +339,7 @@ export const ProductList: React.FC = () => {
           <button
             title="Добавить товар"
             className={styles.buttonAdd}
-            onClick={() => alert("Открыть форму добавления товара")}
+            onClick={() => setIsAddOpen(true)}
             type="button"
           >
             Добавить
@@ -268,17 +347,11 @@ export const ProductList: React.FC = () => {
         </div>
       </div>
 
+      {/* Таблица */}
       <div className={styles.tableContainer}>
         <table className={styles.table}>
           <thead>
             <tr>
-              <th>
-                <input
-                  type="checkbox"
-                  className={styles.checkbox}
-                  aria-label="Выбрать все"
-                />
-              </th>
               <th onClick={() => handleSort("title")} role="button" tabIndex={0}>
                 Наименование {renderSortIndicator("title")}
               </th>
@@ -303,7 +376,7 @@ export const ProductList: React.FC = () => {
           <tbody>
             {!loading && sortedProducts.length === 0 && (
               <tr>
-                <td colSpan={8} style={{ textAlign: "center", padding: 20, color: "#888" }}>
+                <td colSpan={7} style={{ textAlign: "center", padding: 20, color: "#888" }}>
                   Товары не найдены
                 </td>
               </tr>
@@ -311,22 +384,11 @@ export const ProductList: React.FC = () => {
 
             {sortedProducts.map((product) => (
               <tr key={product.id}>
-                <td>
-                  <input
-                    type="checkbox"
-                    className={styles.checkbox}
-                    aria-label={`Выбрать товар ${product.title}`}
-                  />
-                </td>
                 <td>{product.title}</td>
                 <td>{product.brand}</td>
                 <td>{product.sku}</td>
                 <td>
-                  <span
-                    className={`${styles.rating} ${
-                      product.rating < 3 ? styles.low : ""
-                    }`}
-                  >
+                  <span className={`${styles.rating} ${product.rating < 3 ? styles.low : ""}`}>
                     {product.rating.toFixed(2)}
                   </span>
                 </td>
@@ -344,8 +406,8 @@ export const ProductList: React.FC = () => {
                       fontWeight: 600,
                       marginRight: 8,
                     }}
-                    onClick={() => alert(`Добавить товар ${product.title} в корзину`)}
-                    title="Добавить товар"
+                    onClick={() => addToast(`Товар "${product.title}" добавлен в корзину!`)}
+                    title="Добавить товар в корзину"
                     type="button"
                   >
                     +
@@ -374,60 +436,107 @@ export const ProductList: React.FC = () => {
         </table>
       </div>
 
+      {/* Пагинация */}
       {!search.trim() && totalPages > 1 && (
         <div
-          className={styles.pagination}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            marginTop: 20,
-            gap: 12,
-          }}
+          className={styles.paginationWrapper}
           aria-label="Пагинация товаров"
+          style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 20 }}
         >
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            aria-label="Предыдущая страница"
-            style={{
-              cursor: page === 1 ? "not-allowed" : "pointer",
-              padding: "8px 12px",
-              fontSize: 18,
-              borderRadius: 6,
-              border: "1px solid #ccc",
-              backgroundColor: page === 1 ? "#eee" : "white",
-            }}
-          >
-            ‹
-          </button>
-
-          <span
-            aria-live="polite"
-            style={{ minWidth: 60, textAlign: "center", fontWeight: "bold", fontSize: 16 }}
-          >
-            {page} / {totalPages}
-          </span>
-
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            aria-label="Следующая страница"
-            style={{
-              cursor: page === totalPages ? "not-allowed" : "pointer",
-              padding: "8px 12px",
-              fontSize: 18,
-              borderRadius: 6,
-              border: "1px solid #ccc",
-              backgroundColor: page === totalPages ? "#eee" : "white",
-            }}
-          >
-            ›
-          </button>
+          <div className={styles.paginationInfo} style={{ color: "#666", fontSize: 14 }}>
+            Показано {Math.min((page - 1) * ITEMS_PER_PAGE + 1, total)}-
+            {Math.min(page * ITEMS_PER_PAGE, total)} из {total}
+          </div>
+          <nav className={styles.paginationNav} aria-label="Навигация по страницам">
+            <button
+              type="button"
+              onClick={() => onPageClick(page - 1)}
+              disabled={page === 1}
+              aria-label="Предыдущая страница"
+              className={styles.pageButton}
+              style={{ marginRight: 8 }}
+            >
+              &lt;
+            </button>
+            {renderPageNumbers()}
+            <button
+              type="button"
+              onClick={() => onPageClick(page + 1)}
+              disabled={page === totalPages}
+              aria-label="Следующая страница"
+              className={styles.pageButton}
+              style={{ marginLeft: 8 }}
+            >
+              &gt;
+            </button>
+          </nav>
         </div>
       )}
+
+      {/* Модалка добавления товара */}
+      {isAddOpen && (
+        <div className={styles.modalOverlay} role="dialog" aria-modal="true" aria-labelledby="add-product-title" tabIndex={-1}>
+          <div className={styles.modal}>
+            <h3 id="add-product-title">Добавить товар</h3>
+            <form onSubmit={onAddSubmit} className={styles.form}>
+              <div className={styles.formGroup}>
+                <label htmlFor="prod-title">Наименование</label>
+                <input
+                  id="prod-title"
+                  type="text"
+                  value={newProduct.title}
+                  onChange={(e) => setNewProduct({...newProduct, title: e.target.value})}
+                  required
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label htmlFor="prod-price">Цена</label>
+                <input
+                  id="prod-price"
+                  type="number"
+                  min="0"
+                  value={newProduct.price}
+                  onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
+                  required
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label htmlFor="prod-brand">Вендор</label>
+                <input
+                  id="prod-brand"
+                  type="text"
+                  value={newProduct.brand}
+                  onChange={(e) => setNewProduct({...newProduct, brand: e.target.value})}
+                  required
+                />
+              </div>
+              <div className={styles.formGroup}>
+                <label htmlFor="prod-sku">Артикул</label>
+                <input
+                  id="prod-sku"
+                  type="text"
+                  value={newProduct.sku}
+                  onChange={(e) => setNewProduct({...newProduct, sku: e.target.value})}
+                  required
+                />
+              </div>
+              <div className={styles.modalButtons}>
+                <button type="submit" className={styles.modalButtonPrimary}>Добавить</button>
+                <button type="button" className={styles.modalButtonSecondary} onClick={() => setIsAddOpen(false)}>Отмена</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Toast уведомления */}
+      <div className={styles.toastContainer} aria-live="polite" aria-atomic="true">
+        {toasts.map((toast) => (
+          <div key={toast.id} className={styles.toast}>
+            {toast.message}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
