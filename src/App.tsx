@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from './components/context/AuthContext';
 import { LoginForm } from './components/LoginForm/LoginForm';
-import { ProductList } from './components/ProductList/ProductList';
+import  ProductList  from './components/ProductList/ProductList';
 const AppContent = () => {
   const { user, loading } = useAuth();
   const [isLoggedIn, setLoggedIn] = useState(false);
@@ -14,16 +14,7 @@ const AppContent = () => {
 
   if (loading) {
     return (
-      <div
-        style={{
-          height: "100vh",
-          display: "flex",
-          justifyContent: "center",
-          alignItems: "center",
-          fontSize: 24,
-          fontWeight: "bold",
-        }}
-      >
+      <div>
         Загрузка...
       </div>
     );

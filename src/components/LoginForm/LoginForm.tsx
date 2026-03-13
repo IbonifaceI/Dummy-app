@@ -1,39 +1,37 @@
 import React, { useState } from "react";
 import styles from "./LoginForm.module.css";
 import { useAuth } from "../context/AuthContext";
+import { LoginFormProps } from "../types/loginTypes";
 
-interface LoginFormProps {
-  onLoginSuccess: () => void;
-}
+type MessageType = { type: "error" | "success"; message: string } | null;
 
 export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
   const { login, loading } = useAuth();
-
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+  const [form, setForm] = useState({ username: "", password: "" });
   const [rememberMe, setRememberMe] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [message, setMessage] = useState<MessageType>(null);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { id, value } = e.target;
+    setForm((prev) => ({ ...prev, [id]: value }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setSuccess(null);
-
-    if (!username || !password) {
-      setError("Пожалуйста, заполните все поля");
+    setMessage(null);
+    if (!form.username || !form.password) {
+      setMessage({ type: "error", message: "Пожалуйста, заполните все поля" });
       return;
     }
-
     try {
-      await login(username, password, rememberMe);
-      setSuccess("Успешная авторизация!");
+      await login(form.username, form.password, rememberMe);
+      setMessage({ type: "success", message: "Успешная авторизация!" });
       setTimeout(() => {
-        setSuccess(null);
+        setMessage(null);
         onLoginSuccess();
       }, 800);
     } catch (err: any) {
-      setError(err.message || "Ошибка при авторизации");
+      setMessage({ type: "error", message: err.message || "Ошибка при авторизации" });
     }
   };
 
@@ -44,18 +42,19 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
         <h1 className={styles.title}>Добро пожаловать!</h1>
         <p className={styles.subtitle}>Пожалуйста, авторизуйтесь</p>
 
-        {error && <div className={styles.error}>{error}</div>}
-        {success && <div className={styles.success}>{success}</div>}
+        {message && (
+          <div className={message.type === "error" ? styles.error : styles.success}>
+            {message.message}
+          </div>
+        )}
 
-        <label htmlFor="username" className={styles.label}>
-          Почта
-        </label>
+        <label htmlFor="username" className={styles.label}>Логин</label>
         <input
           id="username"
           type="text"
           className={styles.input}
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
+          value={form.username}
+          onChange={handleChange}
           placeholder="Введите почту"
           autoComplete="username"
           required
@@ -69,8 +68,8 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onLoginSuccess }) => {
           id="password"
           type="password"
           className={styles.input}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          value={form.password}
+          onChange={handleChange}
           placeholder="Введите пароль"
           autoComplete="current-password"
           required
