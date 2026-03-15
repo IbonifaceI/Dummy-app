@@ -1,5 +1,3 @@
-// sortProducts.ts
-
 import { Product, SortState } from '../components/types/productsTypes';
 
 export function sortProducts(products: Product[], sort: SortState): Product[] {

@@ -1,32 +1,34 @@
-
 import React, { useEffect, useState } from 'react';
 import styles from './ProductList.module.css';
 import Pagination from '../Pagination/Pagination';
 import ModalForm from '../ModalForm/ModalForm';
-import Toasts from '../toasts';
-import { useFetchProducts, useSorting } from '../../utils/hooks';
-import { Product } from '../types/productsTypes';
+import Toasts from '../Toasts/toasts';
+import { Product, SortState } from '../types/productsTypes';
+import { useSorting } from '../hooks/useSorting';
+import { usePagination } from '../hooks/usePagination';
+import { useFetchProducts } from '../hooks/useFetchProducts'; 
 import { sortProducts } from '../../utils/sortProducts';
 
-const ITEMS_PER_PAGE = 10;
-
 const ProductList: React.FC = () => {
+  const itemsPerPage = 10; 
   const { products, total, fetchPageProductsHook, fetchAllSearchProductsHook } = useFetchProducts();
-  const [sort, setSort] = useSorting(); // Получаем состояние сортировки
-
-  const [page, setPage] = useState(1);
+  const { sort, setSort } = useSorting() as unknown as {
+    sort: SortState;
+    setSort: React.Dispatch<React.SetStateAction<SortState>>;
+  };
+  const { page, totalPages, onPageClick, setPage } = usePagination(total);
   const [search, setSearch] = useState('');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [toasts, setToasts] = useState<Array<{ id: number; message: string }>>([]);
+  const [toasts, setToasts] = useState<{ id: number; message: string }[]>([]);
 
   useEffect(() => {
     setPage(1);
-  }, [search]);
+  }, [search, setPage]);
 
   useEffect(() => {
     const trimmedSearch = search.trim();
-    if (trimmedSearch) {
+    if (trimmedSearch.length > 0) {
       fetchAllSearchProductsHook(trimmedSearch);
     } else {
       fetchPageProductsHook(page);
@@ -39,21 +41,13 @@ const ProductList: React.FC = () => {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3000);
   };
 
-  const handleAddProduct = (product: Omit<Product, 'id'>) => {
+  const handleAddProduct = (product: Omit<Product, 'id'> & { id: number }) => {
     addToast(`Товар "${product.title}" успешно добавлен!`);
   };
 
-  const toggleSelect = (sku: string) => {
-    setSelectedIds((prev) =>
-      selectedIds.includes(sku) ? prev.filter((item) => item !== sku) : [...prev, sku],
-    );
-  };
-
-  const isSelected = (sku: string) => selectedIds.includes(sku);
-
   const onRefresh = () => {
     const trimmedSearch = search.trim();
-    if (trimmedSearch) {
+    if (trimmedSearch.length > 0) {
       fetchAllSearchProductsHook(trimmedSearch);
     } else {
       fetchPageProductsHook(page);
@@ -65,86 +59,78 @@ const ProductList: React.FC = () => {
     setPage(1);
   };
 
+  const onToggleSelectAll = () => {
+    if (selectedIds.length === paginatedProducts.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(paginatedProducts.map((p) => p.id));
+    }
+  };
+
+  const onToggleSelect = (id: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((sid) => sid !== id) : [...prev, id],
+    );
+  };
+
+  const formatPrice = (price: number) => {
+    return price.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  };
+
   const sortedProducts = sortProducts(products, sort);
 
-  const totalPages = Math.ceil(total / ITEMS_PER_PAGE);
+  const paginatedProducts = sortedProducts.slice(
+    (page - 1) * itemsPerPage,
+    page * itemsPerPage,
+  );
 
-  const startIdx = (page - 1) * ITEMS_PER_PAGE;
-  const productsOnPage = sortedProducts.slice(startIdx, startIdx + ITEMS_PER_PAGE);
-
-  const renderTableRows = () =>
-    productsOnPage.map((product) => (
-      <tr
-        key={product.sku}
-        className={`${styles.productRow} ${isSelected(product.sku) && styles.selectedRow}`}
-        onClick={() => toggleSelect(product.sku)}
-      >
-        <td className={styles.checkboxColumn}>
-          <input type="checkbox" checked={isSelected(product.sku)} readOnly />
-        </td>
-        <td className={styles.nameColumn}>
-          <span className={styles.title}>{product.title}</span>
-          <br />
-          <small>{product.category}</small>
-        </td>
-        <td className={styles.vendorColumn}>{product.brand ?? '-'}</td>
-        <td className={styles.skuColumn}>{product.sku}</td>
-        <td className={`${styles.ratingColumn} ${product.rating != null && product.rating <= 3 ? styles.low : ''}`}>
-          {(product.rating != null ? product.rating.toFixed(1) : '-') + '/5'}
-        </td>
-        <td className={styles.priceColumn}>
-          {product.price
-            ?.toLocaleString('ru-RU', { style: 'currency', currency: 'RUB' })
-            ?? '-'}
-        </td>
-        <td className={styles.quantityColumn}>{product.stock ?? 0}</td>
-        <td className={styles.actionsColumn}>
-  <button type="button" className={styles.actionBtnPlus}>
-    +
-  </button>
-  <button type="button" className={styles.actionBtnMore}> 
-    ...
-  </button>
-</td>
-      </tr>
-    ));
+const maxStock = Math.max(...paginatedProducts.map((p) => p.stock ?? 0), 1);
 
   return (
     <div className={styles.productListContainer}>
-      <div className={styles.topBar}>
-        <div className={styles.topBarLeft}>
-          <h2 className={styles.pageTitle}>Товары</h2>
+      <header className={styles.headerBar}>
+        <h1 className={styles.headerTitle}>Товары</h1>
+
+        <div className={styles.headerSearchWrapper}>
+          <input
+            type="search"
+            placeholder="Найти"
+            aria-label="Поиск товаров"
+            className={styles.headerSearchInput}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            autoComplete="off"
+          />
+          <span className={styles.headerSearchIcon}>&#128269;</span>
         </div>
-        <div className={styles.topBarCenter}>
-          <div className={styles.searchWrapper}>
-            <input
-              type="search"
-              placeholder="Найти"
-              className={styles.searchInput}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              aria-label="Поиск товаров"
-              autoComplete="off"
-            />
-            <span className={styles.searchIcon}>🔍</span>
-          </div>
+
+        <div className={styles.headerRightIcons}>
+          <span className={styles.headerIconBadge} data-count="1" aria-label="Выбор языка">🌐</span>
+          <div className={styles.headerRightDivider} />
+          <span className={styles.headerIconBadge} data-count="12" aria-label="Уведомления">🔔</span>
+          <span aria-label="Сообщения" style={{ cursor: 'pointer' }}>✉️</span>
+          <span aria-label="Фильтры" style={{ cursor: 'pointer' }}>⚙️</span>
         </div>
-        <div className={styles.topBarRight}>
+      </header>
+
+      <div className={styles.subHeader}>
+        <span>Все позиции</span>
+        <div style={{ display: 'flex', gap: 12 }}>
           <button
             aria-label="Обновить"
-            className={styles.actionButton}
-            onClick={onRefresh}
+            className={styles.buttonRefresh}
             type="button"
+            onClick={onRefresh}
           >
-            🗘
+            &#8635;
           </button>
           <button
             aria-label="Фильтр"
-            className={styles.actionButton}
-            onClick={onFilter}
+            className={styles.buttonFilter}
             type="button"
+            onClick={onFilter}
           >
-            ☰
+            &#x2630;
           </button>
           <button
             title="Добавить товар"
@@ -152,60 +138,138 @@ const ProductList: React.FC = () => {
             onClick={() => setIsAddOpen(true)}
             type="button"
           >
-            Добавить
+             <span>Добавить</span>
           </button>
         </div>
-      </div>
-
-      <div className={styles.subHeader}>
-        <span className={styles.subHeaderTitle}>Все позиции</span>
       </div>
 
       <table className={styles.productTable}>
         <thead>
           <tr>
-            <th></th>
-            <th
-              onClick={() => setSort({ field: 'title', order: sort.order === 'asc' ? 'desc' : 'asc' })}
-            >
-              Наименование
+            <th className={styles.checkboxColumn}>
+              <input
+                type="checkbox"
+                aria-label="Выбрать все"
+                checked={selectedIds.length === paginatedProducts.length && paginatedProducts.length > 0}
+                onChange={onToggleSelectAll}
+              />
             </th>
-            <th
-              onClick={() => setSort({ field: 'brand', order: sort.order === 'asc' ? 'desc' : 'asc' })}
-            >
-              Вендор
-            </th>
-            <th
-              onClick={() => setSort({ field: 'article', order: sort.order === 'asc' ? 'desc' : 'asc' })}
-            >
-              Артикул
-            </th>
-            <th
-              onClick={() => setSort({ field: 'rating', order: sort.order === 'asc' ? 'desc' : 'asc' })}
-            >
-              Оценка
-            </th>
-            <th
-              onClick={() => setSort({ field: 'price', order: sort.order === 'asc' ? 'desc' : 'asc' })}
-            >
-              Цена,₽
-            </th>
-            <th
-              onClick={() => setSort({ field: 'stock', order: sort.order === 'asc' ? 'desc' : 'asc' })}
-            >
-              Кол-во
-            </th>
-            <th></th>
+            <th className={styles.nameColumn}>Наименование</th>
+            <th className={styles.vendorColumn}>Вендор</th>
+            <th className={styles.skuColumn}>Артикул</th>
+            <th className={styles.ratingColumn}>Оценка</th>
+            <th className={styles.priceColumn}>Цена, ₽</th>
+            <th className={styles.stockColumn}>Количество</th>
+            <th className={styles.actionsColumn} />
           </tr>
         </thead>
-        <tbody>{renderTableRows()}</tbody>
+        <tbody>
+          {paginatedProducts.length === 0 ? (
+            <tr>
+              <td colSpan={8} style={{ textAlign: 'center' }}>
+                Товары не найдены
+              </td>
+            </tr>
+          ) : (
+            paginatedProducts.map((product, index) => {
+              const categories = [
+                'Аксессуары',
+                'Бытовая техника',
+                'Телефоны',
+                'Игровые приставки',
+                'Электроника',
+              ];
+              const category = product.category ?? categories[index % categories.length];
+              const ratingRaw = product.rating ?? 3 + (index % 10) * 0.1;
+              const rating = ratingRaw.toFixed(1);
+              const lowRating = ratingRaw < 3;
+              const isSelected = selectedIds.includes(product.id);
+              const isRowActive = index === 3;
+              return (
+                <tr
+                  key={product.id}
+                  className={`${styles.productRow} ${
+                    isRowActive ? styles.selectedRow : ''
+                  }`}
+                  aria-selected={isSelected}
+                >
+                  <td className={styles.checkboxColumn}>
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => onToggleSelect(product.id)}
+                      aria-label={`Выбрать товар ${product.title}`}
+                    />
+                  </td>
+                  <td className={styles.nameColumn}>
+                    <div>
+                      <a href="#" className="title-link" style={{ fontWeight: 600, color: '#333' }}>
+                        {product.title}
+                      </a>
+                      <small style={{ color: '#666', fontWeight: 400 }}>{category}</small>
+                    </div>
+                  </td>
+                  <td className={styles.vendorColumn}>
+                    <strong>{product.brand}</strong>
+                  </td>
+                  <td className={styles.skuColumn}>{product.sku}</td>
+                  <td className={`${styles.ratingColumn} ${lowRating ? styles.low : ''}`}>
+                    {rating}/5
+                  </td>
+                  <td className={styles.priceColumn}>
+                    {product.price != null ? formatPrice(product.price) : '-'}
+                  </td>
+                 <td className={styles.stockColumn}>
+                  <div className={styles.progressBarCell}>
+                    <div
+                      className={styles.progressBarCellFill}
+                      style={{ width: `${((product.stock ?? 0) / maxStock) * 100}%` }}
+                    />
+                  </div>
+                  </td>
+                  <td className={styles.actionsColumn}>
+                    <button
+                      type="button"
+                      className={styles.actionBtnPlus}
+                      aria-label={`Добавить товар ${product.title}`}
+                      onClick={() => addToast(`Товар "${product.title}" добавлен`)}
+                    >
+                      +
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.actionBtnMore}
+                      aria-label={`Меню действий для товара ${product.title}`}
+                    >
+                      &#8943;
+                    </button>
+                  </td>
+                </tr>
+              );
+            })
+          )}
+        </tbody>
       </table>
 
-      {!search.trim() && totalPages > 1 && (
-        <div className={styles.paginationBlock}>
-          <Pagination currentPage={page} totalPages={totalPages} onPageClick={setPage} />
-        </div>
+      {/* Пагинация c текстом слева, кнопками справа */}
+      <div className={styles.paginationBlock}>
+        {!search.trim() && (
+          <div className={styles.paginationInfo}>
+            Показано <strong>{(page - 1) * itemsPerPage + 1}</strong> -{' '}
+            <strong>{Math.min(page * itemsPerPage, total)}</strong> из <strong>{total}</strong>
+          </div>
       )}
+        <div className={styles.paginationNavigation}>
+          {!search.trim() && totalPages > 1 && (
+            <Pagination
+              currentPage={page}
+              totalItems={total}
+              itemsPerPage={itemsPerPage}
+              onPageClick={onPageClick}
+            />
+          )}
+        </div>
+      </div>
 
       {isAddOpen && (
         <ModalForm
@@ -216,6 +280,7 @@ const ProductList: React.FC = () => {
           }}
         />
       )}
+
       <Toasts toasts={toasts} />
     </div>
   );

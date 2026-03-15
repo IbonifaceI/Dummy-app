@@ -15,7 +15,7 @@ const initialFormState: Product = {
   price: 0,
   brand: '',
   sku: '',
-  rating: 4.0,
+  rating: 3.1,
   stock: 10,
 };
 
