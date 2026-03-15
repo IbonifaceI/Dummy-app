@@ -3,29 +3,37 @@ import styles from './TablePagination.module.css';
 
 type Props = {
   currentPage: number;
-  totalPages: number;
+  totalItems: number;
+  itemsPerPage?: number;
   onPageClick: (pageNumber: number) => void;
 };
 
-const ITEMS_PER_PAGE = 20;
+const Pagination: React.FC<Props> = ({
+  currentPage,
+  totalItems,
+  itemsPerPage = 10,
+  onPageClick,
+}) => {
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
 
-const Pagination: React.FC<Props> = ({ currentPage, totalPages, onPageClick }) => {
+  if (totalPages === 0) return null;
+
   const renderPageNumbers = () => {
     const pages = [];
     let startPage = Math.max(1, currentPage - 2);
-    const endPage = Math.min(totalPages, startPage + 4);
+    let endPage = Math.min(totalPages, startPage + 4);
+
     if (endPage - startPage < 4) {
       startPage = Math.max(1, endPage - 4);
     }
+
     for (let p = startPage; p <= endPage; p++) {
       pages.push(
         <button
           key={p}
           type="button"
           onClick={() => onPageClick(p)}
-          className={`${styles['pagination-button']} ${
-            currentPage === p ? styles['active-page'] : ''
-          }`}
+          className={`${styles['pagination-button']} ${currentPage === p ? styles['active-page'] : ''}`}
           aria-current={currentPage === p ? 'page' : undefined}
           aria-label={`Перейти на страницу ${p}`}
           disabled={currentPage === p}
@@ -37,13 +45,12 @@ const Pagination: React.FC<Props> = ({ currentPage, totalPages, onPageClick }) =
     return pages;
   };
 
-const fromItem = Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, totalPages * ITEMS_PER_PAGE);
-const toItem = Math.min(currentPage * ITEMS_PER_PAGE, totalPages * ITEMS_PER_PAGE);
+  const fromItem = totalItems === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
+  const toItem = Math.min(currentPage * itemsPerPage, totalItems);
 
   return (
     <div className={styles['pagination-wrapper']} aria-label="Пагинация товаров">
       <div className={styles['pagination-info']}>
-        Показано {fromItem} - {toItem} из {totalPages * ITEMS_PER_PAGE}
       </div>
       <nav className={styles['pagination-nav']} aria-label="Навигация по страницам">
         <button

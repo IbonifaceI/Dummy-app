@@ -12,3 +12,12 @@ export interface AddProductModalProps {
   onClose: () => void;
   onAdd: (product: Product) => void;
 }
+
+export interface Toast {
+  id: number;
+  message: string;
+}
+
+export interface ToastsProps {
+  toasts: Toast[];
+}
